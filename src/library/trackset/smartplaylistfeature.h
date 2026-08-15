@@ -3,12 +3,14 @@
 #include <QAction>
 #include <QModelIndex>
 #include <QPointer>
+#include <memory>
 
 #include "library/trackset/basetracksetfeature.h"
 #include "util/parented_ptr.h"
 
 class KeyboardEventFilter;
 class Library;
+class LibraryTableModel;
 class SmartPlaylistDAO;
 class WLibrary;
 class WLibrarySidebar;
@@ -54,8 +56,14 @@ class SmartPlaylistFeature : public BaseTrackSetFeature {
     void slotSmartPlaylistAdded(int smartPlaylistId);
     void slotSmartPlaylistChanged(int smartPlaylistId);
     void slotSmartPlaylistDeleted(int smartPlaylistId);
+    void slotLibraryScanFinished();
+
+    QString smartPlaylistLabel(
+            const QString& name, const QString& query) const;
+    void rebuildSidebar();
 
     SmartPlaylistDAO& m_smartPlaylistDao;
+    std::unique_ptr<LibraryTableModel> m_pLibraryTableModel;
     QPointer<WLibrarySidebar> m_pSidebarWidget;
     QModelIndex m_lastClickedIndex;
     QModelIndex m_lastRightClickedIndex;

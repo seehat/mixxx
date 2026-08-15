@@ -14,6 +14,7 @@
 
 #include "library/dao/smartplaylistdao.h"
 #include "library/library.h"
+#include "library/librarytablemodel.h"
 #include "library/trackcollection.h"
 #include "library/trackcollectionmanager.h"
 #include "library/treeitem.h"
@@ -82,6 +83,10 @@ SmartPlaylistFeature::SmartPlaylistFeature(
           m_smartPlaylistDao(pLibrary->trackCollectionManager()
                   ->internalCollection()
                   ->getSmartPlaylistDAO()),
+          m_pLibraryTableModel(std::make_unique<LibraryTableModel>(
+                  this,
+                  pLibrary->trackCollectionManager(),
+                  "mixxx.db.model.smartplaylists")),
           m_pSidebarWidget(nullptr) {
     initActions();
 
@@ -105,6 +110,10 @@ SmartPlaylistFeature::SmartPlaylistFeature(
             &SmartPlaylistDAO::deleted,
             this,
             &SmartPlaylistFeature::slotSmartPlaylistDeleted);
+    connect(pLibrary->trackCollectionManager(),
+            &TrackCollectionManager::libraryScanFinished,
+            this,
+            &SmartPlaylistFeature::slotLibraryScanFinished);
 }
 
 void SmartPlaylistFeature::initActions() {
@@ -286,7 +295,8 @@ void SmartPlaylistFeature::constructChildModel(int selectedId) {
             selectedRow = row;
         }
         childrenToAdd.push_back(std::make_unique<TreeItem>(
-                smartPlaylist.name, smartPlaylist.id));
+                smartPlaylistLabel(smartPlaylist.name, smartPlaylist.query),
+                smartPlaylist.id));
         ++row;
     }
     m_pSidebarModel->insertTreeItemRows(std::move(childrenToAdd), 0);
@@ -418,8 +428,19 @@ void SmartPlaylistFeature::slotSaveCurrentSearch() {
             smartPlaylistId, m_pLibrary->currentSearch());
 }
 
-void SmartPlaylistFeature::slotSmartPlaylistAdded(int smartPlaylistId) {
-    Q_UNUSED(smartPlaylistId);
+QString SmartPlaylistFeature::smartPlaylistLabel(
+        const QString& name, const QString& query) const {
+    if (m_pLibraryTableModel == nullptr) {
+        return name;
+    }
+    // Count the tracks that the query would show by running it through the
+    // same library table model that the Tracks view uses.
+    m_pLibraryTableModel->search(query);
+    return QStringLiteral("%1 (%2)").arg(name, QString::number(
+            m_pLibraryTableModel->rowCount()));
+}
+
+void SmartPlaylistFeature::rebuildSidebar() {
     // Preserve the current sidebar selection.
     const int selectedId = currentSelectedSmartPlaylistId();
     constructChildModel(selectedId);
@@ -429,14 +450,14 @@ void SmartPlaylistFeature::slotSmartPlaylistAdded(int smartPlaylistId) {
     }
 }
 
+void SmartPlaylistFeature::slotSmartPlaylistAdded(int smartPlaylistId) {
+    Q_UNUSED(smartPlaylistId);
+    rebuildSidebar();
+}
+
 void SmartPlaylistFeature::slotSmartPlaylistChanged(int smartPlaylistId) {
     Q_UNUSED(smartPlaylistId);
-    const int selectedId = currentSelectedSmartPlaylistId();
-    constructChildModel(selectedId);
-    if (selectedId != kInvalidSmartPlaylistId && m_pSidebarWidget &&
-            m_lastClickedIndex.isValid()) {
-        m_pSidebarWidget->selectChildIndex(m_lastClickedIndex, false);
-    }
+    rebuildSidebar();
 }
 
 void SmartPlaylistFeature::slotSmartPlaylistDeleted(int smartPlaylistId) {
@@ -458,6 +479,12 @@ void SmartPlaylistFeature::slotSmartPlaylistDeleted(int smartPlaylistId) {
                     m_pSidebarModel->index(row, 0), false);
         }
     }
+}
+
+void SmartPlaylistFeature::slotLibraryScanFinished() {
+    // The library contents may have changed, so refresh the track counts
+    // shown next to each smart playlist name.
+    rebuildSidebar();
 }
 
 QString SmartPlaylistFeature::formatRootViewHtml() const {
