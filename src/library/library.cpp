@@ -30,6 +30,7 @@
 #include "library/trackset/crate/cratefeature.h"
 #include "library/trackset/playlistfeature.h"
 #include "library/trackset/setlogfeature.h"
+#include "library/trackset/smartplaylistfeature.h"
 #include "library/traktor/traktorfeature.h"
 #include "mixer/playermanager.h"
 #include "moc_library.cpp"
@@ -117,6 +118,8 @@ Library::Library(
             &Library::exportCrate, // signal-to-signal
             Qt::DirectConnection);
 #endif
+
+    addFeature(new SmartPlaylistFeature(this, m_pConfig));
 
     m_pBrowseFeature = new BrowseFeature(
             this, m_pConfig, pRecordingManager);
@@ -727,6 +730,30 @@ void Library::searchTracksInCollection(const QString& query) {
     m_pMixxxLibraryFeature->searchAndActivate(query);
     emit switchToView(m_sTrackViewName);
     m_pSidebarModel->activateDefaultSelection();
+}
+
+void Library::applySearchQuery(const QString& query) {
+    VERIFY_OR_DEBUG_ASSERT(m_pMixxxLibraryFeature) {
+        return;
+    }
+    m_pMixxxLibraryFeature->searchAndActivate(query);
+    emit switchToView(m_sTrackViewName);
+}
+
+QString Library::currentSearch() const {
+    if (m_pLibraryWidget == nullptr) {
+        return QString();
+    }
+    WTrackTableView* pTrackTableView = m_pLibraryWidget->getCurrentTrackTableView();
+    if (pTrackTableView == nullptr) {
+        return QString();
+    }
+    // The model attached to the track table view is a TrackModel.
+    TrackModel* pTrackModel = dynamic_cast<TrackModel*>(pTrackTableView->model());
+    if (pTrackModel == nullptr) {
+        return QString();
+    }
+    return pTrackModel->currentSearch();
 }
 
 #ifdef __ENGINEPRIME__

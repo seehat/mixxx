@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.1"
+   width="32"
+   height="32"
+   viewBox="0 0 32 32"
+   inkscape:version="0.92.3"
+   sodipodi:docname="ic_library_smartplaylists.svg">
+  <defs>
+    <linearGradient id="listGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop style="stop-color:#0496ff;stop-opacity:1;" offset="0"/>
+      <stop style="stop-color:#0278cc;stop-opacity:1;" offset="1"/>
+    </linearGradient>
+  </defs>
+  <g id="ic_library_smartplaylists">
+    <path
+       style="fill:url(#listGrad);fill-opacity:1;stroke:none"
+       d="M 5,5 h 15 c 1.7,0 3,1.3 3,3 v 16 c 0,1.7 -1.3,3 -3,3 H 8 c -1.7,0 -3,-1.3 -3,-3 Z" />
+    <rect
+       style="fill:#ffffff;fill-opacity:0.9;stroke:none"
+       x="8"
+       y="9"
+       width="12"
+       height="2.5"
+       rx="1.25" />
+    <rect
+       style="fill:#ffffff;fill-opacity:0.6;stroke:none"
+       x="8"
+       y="14"
+       width="12"
+       height="2.5"
+       rx="1.25" />
+    <rect
+       style="fill:#ffffff;fill-opacity:0.6;stroke:none"
+       x="8"
+       y="19"
+       width="12"
+       height="2.5"
+       rx="1.25" />
+    <path
+       style="fill:#0496ff;fill-opacity:1;stroke:#ffffff;stroke-width:1.2"
+       d="M 20.5,20.5 l 3.4,3.4" />
+    <circle
+       style="fill:#ffffff;fill-opacity:1;stroke:#0496ff;stroke-width:1.6"
+       cx="21.8"
+       cy="17.2"
+       r="4.6" />
+  </g>
+</svg>

@@ -102,6 +102,15 @@ class Library: public QObject {
     /// and shows the results by switching the view.
     void searchTracksInCollection(const QString& query);
 
+    /// Applies the given search query to the library track table without
+    /// resetting the sidebar selection. Used to filter the whole library by
+    /// the query of a selected smart playlist.
+    void applySearchQuery(const QString& query);
+
+    /// Returns the search query that is currently applied to the library
+    /// track table.
+    QString currentSearch() const;
+
     bool requestAddDir(const QString& directory);
     bool requestRemoveDir(const QString& directory, LibraryRemovalType removalType);
     bool requestRelocateDir(const QString& previousDirectory, const QString& newDirectory);

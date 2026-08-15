@@ -959,6 +959,7 @@ add_library(mixxx-lib STATIC EXCLUDE_FROM_ALL
   src/library/dao/libraryhashdao.cpp
   src/library/dao/playlistdao.cpp
   src/library/dao/settingsdao.cpp
+  src/library/dao/smartplaylistdao.cpp
   src/library/dao/trackdao.cpp
   src/library/dao/trackschema.cpp
   src/library/tabledelegates/defaultdelegate.cpp
@@ -1040,6 +1041,7 @@ add_library(mixxx-lib STATIC EXCLUDE_FROM_ALL
   src/library/trackset/crate/cratetablemodel.cpp
   src/library/trackset/playlistfeature.cpp
   src/library/trackset/setlogfeature.cpp
+  src/library/trackset/smartplaylistfeature.cpp
   src/library/trackset/tracksettablemodel.cpp
   src/library/traktor/traktorfeature.cpp
   src/library/treeitem.cpp
@@ -2213,6 +2215,7 @@ if(BUILD_TESTING)
     src/test/seratotagstest.cpp
     src/test/signalpathtest.cpp
     src/test/skincontext_test.cpp
+    src/test/smartplaylistdao_test.cpp
     src/test/softtakeover_test.cpp
     src/test/soundproxy_test.cpp
     src/test/soundsourceproviderregistrytest.cpp

@@ -11,6 +11,7 @@
 #include "library/dao/directorydao.h"
 #include "library/dao/libraryhashdao.h"
 #include "library/dao/playlistdao.h"
+#include "library/dao/smartplaylistdao.h"
 #include "library/dao/trackdao.h"
 #include "library/trackset/crate/cratestorage.h"
 #include "preferences/usersettings.h"
@@ -59,6 +60,10 @@ class TrackCollection : public QObject,
     PlaylistDAO& getPlaylistDAO() {
         DEBUG_ASSERT_QOBJECT_THREAD_AFFINITY(this);
         return m_playlistDao;
+    }
+    SmartPlaylistDAO& getSmartPlaylistDAO() {
+        DEBUG_ASSERT_QOBJECT_THREAD_AFFINITY(this);
+        return m_smartPlaylistDao;
     }
     const DirectoryDAO& getDirectoryDAO() const {
         DEBUG_ASSERT_QOBJECT_THREAD_AFFINITY(this);
@@ -168,6 +173,7 @@ class TrackCollection : public QObject,
     QSqlDatabase m_database;
 
     PlaylistDAO m_playlistDao;
+    SmartPlaylistDAO m_smartPlaylistDao;
     CrateStorage m_crates;
     CueDAO m_cueDao;
     DirectoryDAO m_directoryDao;

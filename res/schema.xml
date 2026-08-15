@@ -584,4 +584,20 @@ reapplying those migrations.
       UPDATE library SET filetype='aiff' WHERE filetype='aif';
     </sql>
   </revision>
+  <revision version="40" min_compatible="3">
+    <description>
+      Add smart_playlists table for user definable library searches.
+    </description>
+    <sql>
+      -- A smart playlist stores a search query which filters the whole
+      -- library when the playlist is activated in the sidebar.
+      CREATE TABLE IF NOT EXISTS smart_playlists (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name varchar(48) UNIQUE NOT NULL,
+          query TEXT NOT NULL DEFAULT '',
+          date_created datetime,
+          date_modified datetime
+      );
+    </sql>
+  </revision>
 </schema>
