@@ -19,6 +19,7 @@ TrackCollection::TrackCollection(
         QObject* parent,
         const UserSettingsPointer& pConfig)
         : QObject(parent),
+          m_smartPlaylistDao(pConfig),
           m_analysisDao(pConfig),
           m_trackDao(m_cueDao, m_playlistDao,
                      m_analysisDao, m_libraryHashDao, pConfig) {
@@ -73,7 +74,6 @@ void TrackCollection::connectDatabase(const QSqlDatabase& database) {
     m_database = database;
     m_trackDao.initialize(database);
     m_playlistDao.initialize(database);
-    m_smartPlaylistDao.initialize(database);
     m_cueDao.initialize(database);
     m_directoryDao.initialize(database);
     m_analysisDao.initialize(database);

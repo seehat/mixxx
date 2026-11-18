@@ -1,62 +1,178 @@
 #include "library/dao/smartplaylistdao.h"
 
-#include <QSqlQuery>
-#include <QSqlRecord>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
+#include <QSaveFile>
+
+#include <algorithm>
+#include <utility>
 
 #include "moc_smartplaylistdao.cpp"
-#include "library/queryutil.h"
-#include "util/db/dbconnection.h"
+#include "util/logger.h"
 
 namespace {
 
-const QString kSmartPlaylistsTableName = QStringLiteral("smart_playlists");
+const mixxx::Logger kLogger("SmartPlaylistDAO");
 
-const QString kSmartPlaylistsIdColumn = QStringLiteral("id");
-const QString kSmartPlaylistsNameColumn = QStringLiteral("name");
-const QString kSmartPlaylistsQueryColumn = QStringLiteral("query");
+const QString kFileName = QStringLiteral("smartplaylists.json");
+
+const QString kVersionKey = QStringLiteral("version");
+const QString kPlaylistsKey = QStringLiteral("playlists");
+const QString kIdKey = QStringLiteral("id");
+const QString kNameKey = QStringLiteral("name");
+const QString kQueryKey = QStringLiteral("query");
+const QString kDateCreatedKey = QStringLiteral("date_created");
+const QString kDateModifiedKey = QStringLiteral("date_modified");
+
+constexpr int kFileVersion = 1;
+
+QString currentTimestamp() {
+    return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+}
 
 } // anonymous namespace
 
-SmartPlaylistDAO::SmartPlaylistDAO() {
+SmartPlaylistDAO::SmartPlaylistDAO(UserSettingsPointer pConfig)
+        : m_pConfig(std::move(pConfig)) {
 }
 
-void SmartPlaylistDAO::initialize(const QSqlDatabase& database) {
-    DAO::initialize(database);
+QString SmartPlaylistDAO::filePath() const {
+    return QDir(m_pConfig->getSettingsPath()).absoluteFilePath(kFileName);
+}
+
+QList<SmartPlaylistDAO::PlaylistRecord> SmartPlaylistDAO::loadRecords() const {
+    QList<PlaylistRecord> records;
+
+    QFile file(filePath());
+    if (!file.exists()) {
+        return records;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        kLogger.warning()
+                << "Failed to open" << file.fileName()
+                << file.errorString();
+        return records;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc =
+            QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        kLogger.warning()
+                << "Failed to parse" << file.fileName()
+                << parseError.errorString();
+        return records;
+    }
+
+    const QJsonArray playlists = doc.object().value(kPlaylistsKey).toArray();
+    records.reserve(playlists.size());
+    for (const QJsonValue& value : playlists) {
+        const QJsonObject object = value.toObject();
+        PlaylistRecord record;
+        record.id = object.value(kIdKey).toInt(kInvalidSmartPlaylistId);
+        record.name = object.value(kNameKey).toString();
+        record.query = object.value(kQueryKey).toString();
+        record.dateCreated = object.value(kDateCreatedKey).toString();
+        record.dateModified = object.value(kDateModifiedKey).toString();
+        if (record.id > 0 && !record.name.isEmpty()) {
+            records.append(record);
+        }
+    }
+    return records;
+}
+
+bool SmartPlaylistDAO::saveRecords(
+        const QList<PlaylistRecord>& records) const {
+    QJsonArray playlists;
+    for (const PlaylistRecord& record : records) {
+        QJsonObject object;
+        object.insert(kIdKey, record.id);
+        object.insert(kNameKey, record.name);
+        object.insert(kQueryKey, record.query);
+        object.insert(kDateCreatedKey, record.dateCreated);
+        object.insert(kDateModifiedKey, record.dateModified);
+        playlists.append(object);
+    }
+
+    QJsonObject root;
+    root.insert(kVersionKey, kFileVersion);
+    root.insert(kPlaylistsKey, playlists);
+
+    QSaveFile file(filePath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        kLogger.warning()
+                << "Failed to open" << file.fileName()
+                << "for writing:" << file.errorString();
+        return false;
+    }
+    if (file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0) {
+        kLogger.warning()
+                << "Failed to write" << file.fileName()
+                << file.errorString();
+        return false;
+    }
+    if (!file.commit()) {
+        kLogger.warning()
+                << "Failed to commit" << file.fileName()
+                << file.errorString();
+        return false;
+    }
+    return true;
 }
 
 int SmartPlaylistDAO::createSmartPlaylist(
         const QString& name,
         const QString& query) {
-    if (name.trimmed().isEmpty() || smartPlaylistExists(name)) {
+    const QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty()) {
         return kInvalidSmartPlaylistId;
     }
-    QSqlQuery queryExec(m_database);
-    queryExec.prepare(QStringLiteral(
-            "INSERT INTO %1 (%2, %3, date_created, date_modified) "
-            "VALUES (:name, :query, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-                              .arg(kSmartPlaylistsTableName,
-                                      kSmartPlaylistsNameColumn,
-                                      kSmartPlaylistsQueryColumn));
-    queryExec.bindValue(":name", name);
-    queryExec.bindValue(":query", query);
-    if (!queryExec.exec()) {
-        LOG_FAILED_QUERY(queryExec);
+
+    QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.name == trimmedName) {
+            return kInvalidSmartPlaylistId;
+        }
+    }
+
+    int maxId = 0;
+    for (const PlaylistRecord& record : records) {
+        maxId = std::max(maxId, record.id);
+    }
+
+    PlaylistRecord record;
+    record.id = maxId + 1;
+    record.name = trimmedName;
+    record.query = query;
+    record.dateCreated = currentTimestamp();
+    record.dateModified = record.dateCreated;
+    records.append(record);
+
+    if (!saveRecords(records)) {
         return kInvalidSmartPlaylistId;
     }
-    const int smartPlaylistId = queryExec.lastInsertId().toInt();
-    emit added(smartPlaylistId);
-    return smartPlaylistId;
+    emit added(record.id);
+    return record.id;
 }
 
 void SmartPlaylistDAO::deleteSmartPlaylist(const int smartPlaylistId) {
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "DELETE FROM %1 WHERE %2 = :id")
-                          .arg(kSmartPlaylistsTableName,
-                                  kSmartPlaylistsIdColumn));
-    query.bindValue(":id", smartPlaylistId);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
+    QList<PlaylistRecord> records = loadRecords();
+    const auto it = std::find_if(records.begin(),
+            records.end(),
+            [smartPlaylistId](const PlaylistRecord& record) {
+                return record.id == smartPlaylistId;
+            });
+    if (it == records.end()) {
+        return;
+    }
+    records.erase(it);
+    if (!saveRecords(records)) {
         return;
     }
     emit deleted(smartPlaylistId);
@@ -65,40 +181,52 @@ void SmartPlaylistDAO::deleteSmartPlaylist(const int smartPlaylistId) {
 bool SmartPlaylistDAO::renameSmartPlaylist(
         const int smartPlaylistId,
         const QString& newName) {
-    if (newName.trimmed().isEmpty() || smartPlaylistExists(newName)) {
+    const QString trimmedName = newName.trimmed();
+    if (trimmedName.isEmpty()) {
         return false;
     }
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "UPDATE %1 SET %2 = :name, date_modified = CURRENT_TIMESTAMP "
-            "WHERE %3 = :id")
-                          .arg(kSmartPlaylistsTableName,
-                                  kSmartPlaylistsNameColumn,
-                                  kSmartPlaylistsIdColumn));
-    query.bindValue(":name", newName);
-    query.bindValue(":id", smartPlaylistId);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
+
+    QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.name == trimmedName) {
+            return false;
+        }
+    }
+
+    const auto it = std::find_if(records.begin(),
+            records.end(),
+            [smartPlaylistId](const PlaylistRecord& record) {
+                return record.id == smartPlaylistId;
+            });
+    if (it == records.end()) {
         return false;
     }
-    emit renamed(smartPlaylistId, newName);
+    it->name = trimmedName;
+    it->dateModified = currentTimestamp();
+
+    if (!saveRecords(records)) {
+        return false;
+    }
+    emit renamed(smartPlaylistId, trimmedName);
     return true;
 }
 
 bool SmartPlaylistDAO::updateSmartPlaylistQuery(
         const int smartPlaylistId,
         const QString& query) {
-    QSqlQuery queryExec(m_database);
-    queryExec.prepare(QStringLiteral(
-            "UPDATE %1 SET %2 = :query, date_modified = CURRENT_TIMESTAMP "
-            "WHERE %3 = :id")
-                              .arg(kSmartPlaylistsTableName,
-                                      kSmartPlaylistsQueryColumn,
-                                      kSmartPlaylistsIdColumn));
-    queryExec.bindValue(":query", query);
-    queryExec.bindValue(":id", smartPlaylistId);
-    if (!queryExec.exec()) {
-        LOG_FAILED_QUERY(queryExec);
+    QList<PlaylistRecord> records = loadRecords();
+    const auto it = std::find_if(records.begin(),
+            records.end(),
+            [smartPlaylistId](const PlaylistRecord& record) {
+                return record.id == smartPlaylistId;
+            });
+    if (it == records.end()) {
+        return false;
+    }
+    it->query = query;
+    it->dateModified = currentTimestamp();
+
+    if (!saveRecords(records)) {
         return false;
     }
     emit queryChanged(smartPlaylistId);
@@ -106,102 +234,65 @@ bool SmartPlaylistDAO::updateSmartPlaylistQuery(
 }
 
 bool SmartPlaylistDAO::smartPlaylistExists(const QString& name) const {
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "SELECT COUNT(*) FROM %1 WHERE %2 = :name")
-                          .arg(kSmartPlaylistsTableName,
-                                  kSmartPlaylistsNameColumn));
-    query.bindValue(":name", name);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
-        return false;
-    }
-    if (query.next()) {
-        return query.value(0).toInt() > 0;
+    const QString trimmedName = name.trimmed();
+    const QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.name == trimmedName) {
+            return true;
+        }
     }
     return false;
 }
 
 int SmartPlaylistDAO::getSmartPlaylistIdFromName(const QString& name) const {
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "SELECT %1 FROM %2 WHERE %3 = :name")
-                          .arg(kSmartPlaylistsIdColumn,
-                                  kSmartPlaylistsTableName,
-                                  kSmartPlaylistsNameColumn));
-    query.bindValue(":name", name);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
-        return kInvalidSmartPlaylistId;
-    }
-    if (query.next()) {
-        return query.value(0).toInt();
+    const QString trimmedName = name.trimmed();
+    const QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.name == trimmedName) {
+            return record.id;
+        }
     }
     return kInvalidSmartPlaylistId;
 }
 
-QString SmartPlaylistDAO::getSmartPlaylistName(const int smartPlaylistId) const {
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "SELECT %1 FROM %2 WHERE %3 = :id")
-                          .arg(kSmartPlaylistsNameColumn,
-                                  kSmartPlaylistsTableName,
-                                  kSmartPlaylistsIdColumn));
-    query.bindValue(":id", smartPlaylistId);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
-        return QString();
-    }
-    if (query.next()) {
-        return query.value(0).toString();
+QString SmartPlaylistDAO::getSmartPlaylistName(
+        const int smartPlaylistId) const {
+    const QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.id == smartPlaylistId) {
+            return record.name;
+        }
     }
     return QString();
 }
 
-QString SmartPlaylistDAO::getSmartPlaylistQuery(const int smartPlaylistId) const {
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-            "SELECT %1 FROM %2 WHERE %3 = :id")
-                          .arg(kSmartPlaylistsQueryColumn,
-                                  kSmartPlaylistsTableName,
-                                  kSmartPlaylistsIdColumn));
-    query.bindValue(":id", smartPlaylistId);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
-        return QString();
-    }
-    if (query.next()) {
-        return query.value(0).toString();
+QString SmartPlaylistDAO::getSmartPlaylistQuery(
+        const int smartPlaylistId) const {
+    const QList<PlaylistRecord> records = loadRecords();
+    for (const PlaylistRecord& record : records) {
+        if (record.id == smartPlaylistId) {
+            return record.query;
+        }
     }
     return QString();
 }
 
 QList<SmartPlaylistDAO::SmartPlaylist> SmartPlaylistDAO::getSmartPlaylists() const {
     QList<SmartPlaylist> result;
-    QSqlQuery query(m_database);
-    QString queryString = QStringLiteral(
-            "SELECT %1, %2, %3 FROM %4")
-                                  .arg(kSmartPlaylistsIdColumn,
-                                          kSmartPlaylistsNameColumn,
-                                          kSmartPlaylistsQueryColumn,
-                                          kSmartPlaylistsTableName);
-    queryString.append(
-            mixxx::DbConnection::collateLexicographically(
-                    QStringLiteral(" ORDER BY LOWER(name)")));
-    query.prepare(queryString);
-    if (!query.exec()) {
-        LOG_FAILED_QUERY(query);
-        return result;
-    }
-    const int idColumn = query.record().indexOf(kSmartPlaylistsIdColumn);
-    const int nameColumn = query.record().indexOf(kSmartPlaylistsNameColumn);
-    const int queryColumn = query.record().indexOf(kSmartPlaylistsQueryColumn);
-    while (query.next()) {
+    const QList<PlaylistRecord> records = loadRecords();
+    result.reserve(records.size());
+    for (const PlaylistRecord& record : records) {
         SmartPlaylist smartPlaylist;
-        smartPlaylist.id = query.value(idColumn).toInt();
-        smartPlaylist.name = query.value(nameColumn).toString();
-        smartPlaylist.query = query.value(queryColumn).toString();
+        smartPlaylist.id = record.id;
+        smartPlaylist.name = record.name;
+        smartPlaylist.query = record.query;
         result.append(smartPlaylist);
     }
+    std::sort(result.begin(),
+            result.end(),
+            [](const SmartPlaylist& lhs, const SmartPlaylist& rhs) {
+                return QString::compare(
+                               lhs.name, rhs.name, Qt::CaseInsensitive) < 0;
+            });
     return result;
 }

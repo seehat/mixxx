@@ -3,18 +3,19 @@
 #include <QList>
 #include <QObject>
 #include <QString>
-#include <QVariant>
 
-#include "library/dao/dao.h"
+#include "preferences/usersettings.h"
 #include "util/class.h"
-
-class QSqlDatabase;
 
 constexpr int kInvalidSmartPlaylistId = -1;
 
 // A smart playlist is a named search query which filters the whole library
 // when activated in the sidebar.
-class SmartPlaylistDAO : public QObject, public virtual DAO {
+//
+// Smart playlists are stored in a JSON file in the settings directory
+// (smartplaylists.json) instead of the SQLite database. This keeps the
+// database schema untouched and compatible with upstream Mixxx releases.
+class SmartPlaylistDAO : public QObject {
     Q_OBJECT
   public:
     struct SmartPlaylist {
@@ -27,10 +28,8 @@ class SmartPlaylistDAO : public QObject, public virtual DAO {
         }
     };
 
-    SmartPlaylistDAO();
+    explicit SmartPlaylistDAO(UserSettingsPointer pConfig);
     ~SmartPlaylistDAO() override = default;
-
-    void initialize(const QSqlDatabase& database) override;
 
     // Creates a new smart playlist. Returns the new id or
     // kInvalidSmartPlaylistId if the name is empty or already in use or the
@@ -62,5 +61,20 @@ class SmartPlaylistDAO : public QObject, public virtual DAO {
     void deleted(int smartPlaylistId);
 
   private:
+    // A record as stored on disk, including the timestamp strings which are
+    // preserved verbatim so that no information is lost on round-trips.
+    struct PlaylistRecord {
+        int id = kInvalidSmartPlaylistId;
+        QString name;
+        QString query;
+        QString dateCreated;
+        QString dateModified;
+    };
+
+    QString filePath() const;
+    QList<PlaylistRecord> loadRecords() const;
+    bool saveRecords(const QList<PlaylistRecord>& records) const;
+
+    UserSettingsPointer m_pConfig;
     DISALLOW_COPY_AND_ASSIGN(SmartPlaylistDAO);
 };
