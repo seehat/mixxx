@@ -1,0 +1,29 @@
+# Fork-only workflow. Builds and tests every push to a development branch in
+# this fork, including branches with a slash in their name (develop.yml only
+# matches `*`, which does not match `/`).
+# Can be removed without affecting upstream CI.
+
+name: Fork build
+
+on:
+  push:
+    branches:
+      - "**"
+      - "!main"
+      - "![0-9].[0-9]"
+  workflow_dispatch:
+
+permissions:
+  contents: read #  to fetch code (actions/checkout)
+
+# A new push supersedes the still running build for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      branch: ${{ github.head_ref || github.ref_name }}
+      ref: ${{ github.ref }}
